@@ -1,0 +1,14 @@
+
+# Environment variables
+.env
+
+# Agent output
+agents/output/
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
