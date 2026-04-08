@@ -61,13 +61,78 @@ All tests follow the Page Object Model. See `e2e/pages/todo-page.ts` and `e2e/to
 
 ## AI Agents (`agents/index.ts`)
 
-Two agents form a scenario-generation pipeline. Run with `npx tsx agents/index.ts`. Requires `ANTHROPIC_API_KEY` set in `.env` (excluded from git).
+A four-phase pipeline that takes a plain-English feature plan and produces passing Playwright tests. Requires `ANTHROPIC_API_KEY` set in `.env` (excluded from git).
 
-| Agent | Model | Role |
-|---|---|---|
-| `sdетAgent(plan)` | `claude-opus-4-6` | Identifies test scenarios from a requirements plan; uses adaptive thinking |
-| `reviewerAgent(scenarios)` | `claude-sonnet-4-6` | Reviews scenarios for coverage, gaps, and redundancy |
+```bash
+# Run the full pipeline
+npx tsx agents/index.ts
 
-**`runPipeline(plan)`** chains both agents: SDET output feeds directly into the reviewer.
+# Resume from a specific phase using a prior run's artifacts
+npx tsx agents/index.ts --resume-from=phase3 --run-id=2026-04-08T16-05-23
+npx tsx agents/index.ts --resume-from phase4 --run-id 2026-04-08T16-05-23
+```
 
-Both stream output to stdout. Return the final text string for downstream use.
+The run ID is printed at the start of every fresh run — note it if you may want to resume later.
+
+### Phases
+
+| Phase | Agents | Model | Input → Output |
+|---|---|---|---|
+| 1 — Scenarios | `scenarioAgent` + `scenarioReviewerAgent` | Opus 4.6 / Sonnet 4.6 | Feature plan → deduplicated test scenarios |
+| 2 — Structure | `structurePlannerAgent` + `structureReviewerAgent` | Opus 4.6 / Sonnet 4.6 | Scenarios → Page Object Model structure plan |
+| 3 — Authoring | `authorAgent` + `authorReviewerAgent` + `writeTestFiles` | Opus 4.6 / Sonnet 4.6 | Structure plan → TypeScript files written to `e2e/` |
+| 4 — Execution | `testExecutorAgent` + `verifierAgent` | — / Sonnet 4.6 | Runs `npx playwright test`; re-runs once if results look flaky |
+
+All Opus 4.6 agents use adaptive thinking. All agents stream output to stdout.
+
+### Artifacts
+
+Each run creates a directory under `agents/output/runs/{runId}/` with per-phase output files:
+
+```
+agents/output/runs/{runId}/
+  meta.json                          # run metadata and completed phases
+  phase1-scenarios.txt
+  phase1-approved-scenarios.txt
+  phase2-structure-plan.txt
+  phase2-approved-structure-plan.txt
+  phase3-author-output.txt
+  phase3-approved-author-output.txt
+  phase4-execution.json
+  phase4-verification.json
+```
+
+A full Markdown summary is also written to `agents/output/pipeline-{timestamp}.md`.
+
+### Resuming a Phase
+
+Use `--resume-from` to skip completed phases and re-run from any point. All phases prior to the resume point are loaded from disk — no LLM calls are made for them.
+
+```bash
+# Re-run only test execution (phases 1–3 already done)
+npx tsx agents/index.ts --resume-from=phase4 --run-id=2026-04-08T16-05-23
+
+# Re-author and re-execute (phases 1–2 already done)
+npx tsx agents/index.ts --resume-from=phase3 --run-id=2026-04-08T16-05-23
+
+# Re-plan structure and everything after (phase 1 already done)
+npx tsx agents/index.ts --resume-from=phase2 --run-id=2026-04-08T16-05-23
+```
+
+`--run-id` is required when using `--resume-from`. The pipeline validates that all phases before the resume point are marked complete in `meta.json` before proceeding.
+
+### Agent Source Layout
+
+```
+agents/
+  index.ts              # pipeline orchestrator (runPipeline, CLI entry point)
+  phases/
+    scenario.ts         # Phase 1 agents
+    structure.ts        # Phase 2 agents
+    author.ts           # Phase 3 agents + writeTestFiles
+    executor.ts         # Phase 4 agents
+  lib/
+    artifacts.ts        # artifact save/load, run metadata, CLI arg validation
+    stream.ts           # Claude streaming helpers
+    reviewer.ts         # createReviewer factory (shared by phases 1–3)
+```
