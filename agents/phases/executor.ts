@@ -16,7 +16,7 @@ export interface ExecutionResult {
 }
 
 export interface VerificationResult {
-  verdict: 'pass' | 'fail' | 'flaky';
+  verdict: 'pass' | 'fail' | 'flaky' | 'platform';
   shouldRerun: boolean;
   analysis: string;
 }
@@ -64,19 +64,26 @@ export async function verifierAgent(execution: ExecutionResult): Promise<Verific
     max_tokens: 4096,
     system: `You are a test verification agent. Analyze Playwright test execution output and determine:
 1. Whether the tests genuinely pass or fail
-2. Whether any failures look like infrastructure/flakiness issues (timeouts, network, browser launch) vs real assertion failures
-3. Whether a rerun is likely to help
+2. Whether any failures are intermittent/transient (infrastructure, timeouts, network, browser launch) vs. deterministic
+3. Whether failures are consistent on a specific browser/platform but not others
+4. Whether a rerun is likely to help
 
 Respond with a JSON object (no markdown fences):
 {
-  "verdict": "pass" | "fail" | "flaky",
+  "verdict": "pass" | "fail" | "flaky" | "platform",
   "shouldRerun": boolean,
   "analysis": "concise explanation of what happened and why"
 }
 
 - "pass": all tests passed
-- "flaky": some tests failed but failures appear to be environmental/transient — recommend rerun
-- "fail": tests failed due to real assertion errors or missing selectors — rerun won't help`,
+- "flaky": failures appear intermittent/transient (timeouts, network issues, browser launch failures) — a rerun may produce different results; set shouldRerun: true
+- "platform": failures are consistent on one or more specific browsers (e.g. WebKit, Firefox) but pass on others — this is a deterministic browser behavioral difference, not flakiness; rerun won't help; set shouldRerun: false
+- "fail": failures are consistent across all browsers due to assertion errors, missing selectors, or broken logic — rerun won't help; set shouldRerun: false
+
+Key distinction — flaky vs platform:
+- Flaky: the same test SOMETIMES passes and SOMETIMES fails (non-deterministic)
+- Platform: the same test ALWAYS fails on browser X and ALWAYS passes on browser Y (deterministic, cross-browser difference)
+If a test consistently fails only on WebKit or only on Firefox, classify as "platform", not "flaky".`,
     messages: [
       {
         role: 'user',

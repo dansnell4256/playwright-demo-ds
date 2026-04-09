@@ -110,13 +110,13 @@ Use `--resume-from` to skip completed phases and re-run from any point. All phas
 
 ```bash
 # Re-run only test execution (phases 1–3 already done)
-npx tsx agents/index.ts --resume-from=phase4 --run-id=2026-04-08T16-05-23
+npx tsx agents/index.ts --resume-from=phase4 --run-id=2026-04-08T16-05-23-976Z
 
 # Re-author and re-execute (phases 1–2 already done)
-npx tsx agents/index.ts --resume-from=phase3 --run-id=2026-04-08T16-05-23
+npx tsx agents/index.ts --resume-from=phase3 --run-id=2026-04-08T16-05-23-976Z
 
 # Re-plan structure and everything after (phase 1 already done)
-npx tsx agents/index.ts --resume-from=phase2 --run-id=2026-04-08T16-05-23
+npx tsx agents/index.ts --resume-from=phase2 --run-id=2026-04-08T16-05-23-976Z
 ```
 
 `--run-id` is required when using `--resume-from`. The pipeline validates that all phases before the resume point are marked complete in `meta.json` before proceeding.
